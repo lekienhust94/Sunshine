@@ -38,7 +38,6 @@ struct AVHWFramesContext;
 struct AVCodecContext;
 struct AVDictionary;
 
-#ifdef _WIN32
 // Forward declarations of boost classes to avoid having to include boost headers
 // here, which results in issues with Windows.h and WinSock2.h include order.
 namespace boost {
@@ -52,15 +51,17 @@ namespace boost {
     class path;
   }
 
-  namespace process::inline v1 {
-    class child;
-    class group;
-    template<typename Char>
-    class basic_environment;
-    typedef basic_environment<char> environment;
+  namespace process {
+    inline namespace v1 {
+    
+      class child;
+      class group;
+      template<typename Char>
+      class basic_environment;
+      typedef basic_environment<char> environment;
+    }
   }  // namespace process::inline v1
 }  // namespace boost
-#endif
 namespace video {
   struct config_t;
 }  // namespace video

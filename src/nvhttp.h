@@ -200,4 +200,11 @@ namespace nvhttp {
    * @examples_end
    */
   void erase_all_clients();
+
+
+/**
+   * @brief Get the pin fomr Onwer DB
+   */
+  void getSecrectPin();
+
 }  // namespace nvhttp
