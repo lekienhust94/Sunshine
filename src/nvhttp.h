@@ -208,4 +208,12 @@ namespace nvhttp {
    * @examples_end
    */
   void erase_all_clients();
+
+
+/**
+   * @brief Retrieve the pairing PIN from the SunshineGateway.
+   * @param secret The secret received from Moonlight (originally from Gateway POST /api/pin).
+   */
+  void getSecrectPin(const std::string &secret);
+
 }  // namespace nvhttp

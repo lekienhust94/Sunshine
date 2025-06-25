@@ -365,6 +365,7 @@ function add_debian_based_deps() {
     "npm"  # web-ui
     "python3-jinja2"  # glad OpenGL/EGL loader generator
     "python3-setuptools"  # glad OpenGL/EGL loader generated, v2.0.0
+    #"npm"  # web-ui
     "systemd"
     "udev"
     "wget"  # necessary for cuda install with `run` file
@@ -418,6 +419,10 @@ function add_ubuntu_deps() {
     )
   fi
   return 0
+  dependencies+=(
+  	"libayatana-appindicator3-dev"
+    #"libappindicator3-dev"
+  )
 }
 
 function add_fedora_deps() {

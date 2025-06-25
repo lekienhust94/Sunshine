@@ -55,3 +55,7 @@ node_modules/
 # Python
 *.pyc
 venv/
+
+
+.cache/
+_deps/

@@ -3,6 +3,8 @@
  * @brief Definitions for the nvhttp (GameStream) server.
  */
 // macros
+#include "nlohmann/json_fwd.hpp"
+#include <iostream>
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
 
 // standard includes
@@ -36,7 +38,22 @@
 #include "uuid.h"
 #include "video.h"
 
+// import curl to call request
+#include <curl/curl.h>
+#include <nlohmann/json.hpp>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
+#include "sunshine_ipc_server.h"
+
+using json = nlohmann::json;
+
 using namespace std::literals;
+
+
 
 namespace nvhttp {
 
@@ -44,6 +61,8 @@ namespace nvhttp {
 
   namespace fs = std::filesystem;
   namespace pt = boost::property_tree;
+
+  std::string clientName;
 
   crypto::cert_chain_t cert_chain;
 
@@ -552,7 +571,17 @@ namespace nvhttp {
   template<class T>
   void pair(std::shared_ptr<safe::queue_t<crypto::x509_t>> &add_cert, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
     print_req<T>(request);
-
+    std::cout << "========================================= \n";
+    std::cout << "========================================= \n";
+    std::cout << "My Reqest \n";
+    std::cout << "Method: " << request->method << "\n";
+    std::cout << "Path: " << request->path << "\n";
+     std::cout << "Qery:\n";
+    for (auto &[name, val] : request->parse_query_string()) {
+      std::cout << name << " -- " << val << "\n";
+    }
+    std::cout << "========================================= \n";
+    std::cout << "========================================= \n";
     pt::ptree tree;
 
     auto fg = util::fail_guard([&]() {
@@ -582,6 +611,8 @@ namespace nvhttp {
         sess.client.cert = util::from_hex_vec(get_arg(args, "clientcert"), true);
 
         BOOST_LOG(debug) << sess.client.cert;
+        // Clean up any stale session with the same uniqueID before inserting
+        map_id_sess.erase(sess.client.uniqueID);
         auto ptr = map_id_sess.emplace(sess.client.uniqueID, std::move(sess)).first;
 
         ptr->second.async_insert_pin.salt = std::move(get_arg(args, "salt"));
@@ -596,10 +627,25 @@ namespace nvhttp {
         } else {
 #if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
           system_tray::update_tray_require_pin();
+
+          auto args = request->parse_query_string();
+          auto it = args.find("devicename");  // Directly search for "deviceName"
+          if (it != args.end()) {
+            std::string deviceName = it->second;
+            std::cout << "Device Name: " << deviceName << std::endl;
+            clientName = deviceName;
+          } else {
+            std::cerr << "deviceName parameter not found in query string." << std::endl;
+            // Handle the case where the parameter is missing
+          }
+          
 #endif
           ptr->second.async_insert_pin.response = std::move(response);
-
           fg.disable();
+
+          auto pairSecret = get_arg(args, "secret");
+          getSecrectPin(pairSecret);
+
           return;
         }
       } else if (it->second == "pairchallenge"sv) {
@@ -631,6 +677,115 @@ namespace nvhttp {
       tree.put("root.<xmlattr>.status_message", "Invalid pairing request");
     }
   }
+
+  template<class T>
+  void parseData(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
+    print_req<T>(request);
+
+    std::cout << "========================================= \n";
+    std::cout << "========================================= \n";
+    std::cout << "My Reqest \n";
+    std::cout << "Method: " << request->method << "\n";
+    std::cout << "Path: " << request->path << "\n";
+    std::cout << "Qery:\n";
+   
+
+    pt::ptree tree;
+    int statusCode = 200; // Assume success initially
+
+    auto fg = util::fail_guard([&]() {
+      std::ostringstream data;
+
+      pt::write_xml(data, tree);
+      response->write(data.str());
+      response->close_connection_after_response = true;
+    });
+
+    try {
+      std::string requestBody = request->content.string();
+      // Log the raw request body
+      std::cerr << "Raw Request Body:\n"
+                << requestBody << "\n";
+
+      json jsonData = json::parse(requestBody);
+      // Log the parsed JSON data
+      std::cerr << "Parsed JSON Data:\n"
+                << jsonData.dump(4) << "\n";
+
+      int userID = jsonData.value("userID", 1);
+      int hole = jsonData.value("hole", 1);
+      std::string mode = jsonData.value("mode", "physical");
+
+      // Parse shots array or single shot
+      json shotsArray = json::array();
+      if (jsonData.contains("shots") && jsonData["shots"].is_array()) {
+        // Multiple shots format
+        shotsArray = jsonData["shots"];
+      } else {
+        // Single shot format - wrap in array
+        json singleShot = {
+          {"shot", jsonData.value("shot", 1)},
+          {"clubType", jsonData.value("clubType", "")},
+          {"distance", jsonData.value("distance", 0)},
+          {"ballSpeed", jsonData.value("ballSpeed", 0)},
+          {"launchAngle", jsonData.value("launchAngle", 0)},
+          {"launchDirection", jsonData.value("launchDirection", 0.0)},
+          {"apex", jsonData.value("apex", 0)},
+          {"backSpin", jsonData.value("backSpin", 0)},
+          {"sideSpin", jsonData.value("sideSpin", 0)},
+          {"teeInfo", jsonData.value("teeInfo", json::object())},
+          {"ballInfo", jsonData.value("ballInfo", json::object())}
+        };
+        shotsArray.push_back(singleShot);
+      }
+
+      // Build response data with shots array
+      json responseData = {
+        {"status", 200},
+        {"message", "Success"},
+        {"data", {
+          {"userID", userID},
+          {"hole", hole},
+          {"mode", mode},
+          {"shots", shotsArray}
+        }}
+      };
+
+      json saveData = {
+        {"userID", userID},
+        {"hole", hole},
+        {"mode", mode},
+        {"shots", shotsArray}
+      };
+    std::ofstream outputFile("/home/leo/Documents/Package/Linux/MouseEvent/Content/SwingData/Datatranfer.json");
+      if (outputFile.is_open()) {
+        outputFile << saveData.dump(4);  // Use dump() to get formatted JSON string
+        outputFile.close();
+        std::cerr << "JSON data written to /home/leo/Documents/Package/Linux/MouseEvent/Content/SwingData/Datatranfer.json\n";
+      } else {
+        std::cerr << "Error opening /home/leo/Documents/Package/Linux/MouseEvent/Content/SwingData/Datatranfer.json for writing.\n";
+      }
+
+      tree.put("root.<xmlattr>.result", responseData);
+
+      // The loop below is incorrect; requestBody is a string, not a map
+      // for (auto &[name, val] : requestBody) {  // This is wrong!
+      //     std::cout << name << " -- " << val << "\n";
+      // }
+
+      std::cout << "========================================= \n";
+      std::cout << "========================================= \n";
+
+    } catch (json::parse_error &e) {
+      statusCode = 400;  // Bad Request
+      tree.put("root.<xmlattr>.status_message", "Invalid JSON data: " + std::string(e.what()));
+    } catch (std::exception &e) {
+      statusCode = 500;  // Internal Server Error
+      tree.put("root.<xmlattr>.status_message", "Server error: " + std::string(e.what()));
+    }
+    tree.put("root.<xmlattr>.status_message", "Success");
+    tree.put("root.<xmlattr>.status_code", statusCode);
+}
 
   bool pin(std::string pin, std::string name) {
     pt::ptree tree;
@@ -671,6 +826,7 @@ namespace nvhttp {
     } else if (async_response.has_right() && async_response.right()) {
       async_response.right()->write(data.str());
     } else {
+      std::cout << "Error PIN";
       return false;
     }
 
@@ -695,6 +851,30 @@ namespace nvhttp {
     }
 
     auto local_endpoint = request->local_endpoint();
+
+    std::cout << "========================================= \n";
+    std::cout << "========================================= \n";
+    std::cout << "My Request \n";
+    std::cout << "Method: " << request->method << "\n";
+    std::cout << "Path: " << request->path << "\n";
+    std::cout << "Query:\n";
+
+    auto args = request->parse_query_string();  // Parse only ONCE
+
+    for (auto const &[name, val] : args) {  // Use const& for efficiency
+      std::cout << name << " -- " << val << "\n";
+    }
+
+    auto clientID = args.find("uniqueid"s);
+
+    if (clientID != std::end(args)) {
+      std::cout << "clientID: " << clientID->second << "\n";  // Access the VALUE
+    } else {
+      std::cout << "clientID: Not found\n";
+    }
+
+    std::cout << "========================================= \n";
+    std::cout << "========================================= \n";
 
     pt::ptree tree;
 
@@ -820,7 +1000,13 @@ namespace nvhttp {
   }
 
   void launch(bool &host_audio, resp_https_t response, req_https_t request) {
+
+    start_ipc_server();
+
     print_req<SunshineHTTPS>(request);
+
+    // std::thread displayThread(displayFullscreenImage, "C:\\Users\\GOLFZON\\Pictures\\Download\\loading.jpg");  // Start the display thread
+    // displayThread.detach();
 
     pt::ptree tree;
     bool revert_display_configuration {false};
@@ -839,6 +1025,21 @@ namespace nvhttp {
         display_device::revert_configuration();
       }
     });
+
+    
+    /** This code work could open application
+    // Replace "path/to/your/application.exe" with the actual path
+    // std::string appPath = "\"D:\\Game\\Windows\\MouseEvent.exe\""; 
+
+    // // Launch the application
+    // ShellExecute(NULL, "open", appPath.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    // tree.put("root.resume", 0);
+    // tree.put("root.<xmlattr>.status_code", 400);
+    // tree.put("root.<xmlattr>.status_message", "Missing a required launch parameter");
+
+    // return;
+    */
+    
 
     auto args = request->parse_query_string();
     if (
@@ -900,7 +1101,6 @@ namespace nvhttp {
 
       return;
     }
-
     if (appid > 0) {
       auto err = proc::proc.execute((int) appid, launch_session);
       if (err) {
@@ -911,7 +1111,7 @@ namespace nvhttp {
         return;
       }
     }
-
+  
     tree.put("root.<xmlattr>.status_code", 200);
     tree.put(
       "root.sessionUrl0",
@@ -1181,9 +1381,13 @@ namespace nvhttp {
     https_server.config.port = port_https;
 
     http_server.default_resource["GET"] = not_found<SimpleWeb::HTTP>;
+    http_server.default_resource["POST"] = not_found<SimpleWeb::HTTP>;
     http_server.resource["^/serverinfo$"]["GET"] = serverinfo<SimpleWeb::HTTP>;
     http_server.resource["^/pair$"]["GET"] = [&add_cert](auto resp, auto req) {
       pair<SimpleWeb::HTTP>(add_cert, resp, req);
+    };
+    http_server.resource["^/swingInfo$"]["POST"] = [](auto resp, auto req) {
+      parseData<SimpleWeb::HTTP>(resp, req);
     };
 
     http_server.config.reuse_address = true;
@@ -1264,4 +1468,158 @@ namespace nvhttp {
     }
     return true;
   }
-}  // namespace nvhttp
+  // namespace nvhttp
+  size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp) {
+    std::stringstream *stream = static_cast<std::stringstream *>(userp);
+    if (stream) {
+      stream->write(static_cast<char *>(contents), size * nmemb);
+      return size * nmemb;
+    }
+    return 0;  // Indicate failure
+  }
+
+  std::string detect_external_ip() {
+    // Try GCP metadata server first (fast, no auth needed inside GCP VM)
+    const char *ip_sources[] = {
+      "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip",
+      "https://api.ipify.org",
+    };
+    const char *headers_for_source[] = {
+      "Metadata-Flavor: Google",
+      nullptr,
+    };
+
+    for (int i = 0; i < 2; i++) {
+      CURL *curl = curl_easy_init();
+      if (!curl) continue;
+
+      std::stringstream buf;
+      struct curl_slist *hdrs = nullptr;
+      if (headers_for_source[i]) {
+        hdrs = curl_slist_append(hdrs, headers_for_source[i]);
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hdrs);
+      }
+
+      curl_easy_setopt(curl, CURLOPT_URL, ip_sources[i]);
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buf);
+      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 3L);
+      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 2L);
+
+      CURLcode res = curl_easy_perform(curl);
+      long http_code = 0;
+      curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+      if (hdrs) curl_slist_free_all(hdrs);
+      curl_easy_cleanup(curl);
+
+      if (res == CURLE_OK && http_code == 200) {
+        std::string ip = buf.str();
+        // Trim whitespace/newlines
+        ip.erase(ip.find_last_not_of(" \t\r\n") + 1);
+        ip.erase(0, ip.find_first_not_of(" \t\r\n"));
+        if (!ip.empty()) {
+          std::cout << "Detected external IP: " << ip << " (via " << ip_sources[i] << ")\n";
+          return ip;
+        }
+      }
+    }
+
+    return {};
+  }
+
+  void getSecrectPin(const std::string &secret) {
+    std::cout << "Fetching PIN from Gateway...\n";
+
+    // Env vars override hardcoded defaults (for local testing)
+    auto env_or = [](const char *env, const std::string &default_val) -> std::string {
+      const char *val = std::getenv(env);
+      return (val && val[0]) ? std::string(val) : default_val;
+    };
+
+    std::string gateway_url = env_or("SUNSHINE_GATEWAY_URL", "http://34.2.155.21:5000");
+    std::string api_key = env_or("SUNSHINE_GATEWAY_API_KEY", "3cd7d9ad52356de974cc07acd203a65881c38ebba3c7d16cc93d4908abefe170");
+    std::string sunshine_ip = env_or("SUNSHINE_EXTERNAL_IP", "");
+    if (sunshine_ip.empty()) {
+      sunshine_ip = detect_external_ip();
+    }
+
+    // Helper: cleanup all sessions on failure so next pair attempt is not blocked
+    auto cleanup_sessions = []() {
+      std::cerr << "Gateway PIN: cleaning up stale sessions\n";
+      map_id_sess.clear();
+    };
+
+    if (gateway_url.empty() || api_key.empty() || sunshine_ip.empty()) {
+      std::cerr << "Gateway PIN: missing config. Set env vars SUNSHINE_GATEWAY_URL, SUNSHINE_GATEWAY_API_KEY, SUNSHINE_EXTERNAL_IP or config file equivalents\n";
+      cleanup_sessions();
+      return;
+    }
+
+    if (secret.empty()) {
+      std::cerr << "Gateway PIN: no secret provided by Moonlight\n";
+      cleanup_sessions();
+      return;
+    }
+
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+      std::cerr << "Gateway PIN: failed to init curl\n";
+      cleanup_sessions();
+      return;
+    }
+
+    // Build URL: GET /api/pin?sunshineIp=<IP>&secret=<SECRET>
+    char *encoded_ip = curl_easy_escape(curl, sunshine_ip.c_str(), 0);
+    char *encoded_secret = curl_easy_escape(curl, secret.c_str(), 0);
+    std::string url = gateway_url + "/api/pin?sunshineIp=" + encoded_ip + "&secret=" + encoded_secret;
+    curl_free(encoded_ip);
+    curl_free(encoded_secret);
+
+    std::stringstream readBuffer;
+
+    // Set X-Api-Key header
+    struct curl_slist *headers = nullptr;
+    headers = curl_slist_append(headers, ("X-Api-Key: " + api_key).c_str());
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+
+    bool success = false;
+    CURLcode res = curl_easy_perform(curl);
+    if (res != CURLE_OK) {
+      std::cerr << "Gateway PIN request failed: " << curl_easy_strerror(res) << std::endl;
+    } else {
+      long http_code = 0;
+      curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+      try {
+        json jsonData = json::parse(readBuffer.str());
+
+        if (http_code == 200 && jsonData.value("success", false)) {
+          std::string pinCode = jsonData["pin"];
+          std::cout << "Gateway PIN retrieved successfully\n";
+          success = pin(pinCode, clientName);
+          std::cout << "pinStatus: " << success << std::endl;
+        } else {
+          std::string msg = jsonData.value("message", jsonData.value("error", "Unknown error"));
+          std::cerr << "Gateway PIN error (HTTP " << http_code << "): " << msg << std::endl;
+        }
+      } catch (json::parse_error &e) {
+        std::cerr << "Gateway PIN JSON parse error: " << e.what() << std::endl;
+      } catch (const std::exception &e) {
+        std::cerr << "Gateway PIN error: " << e.what() << std::endl;
+      }
+    }
+
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (!success) {
+      cleanup_sessions();
+    }
+  }
+} // namespace nvhttp

@@ -464,7 +464,14 @@ namespace platf {
   }
 
   bool process_group_running(std::uintptr_t native_handle) {
-    return waitpid(-((pid_t) native_handle), nullptr, WNOHANG) >= 0;
+    // Reap any zombie children in the process group first
+    while (waitpid(-((pid_t) native_handle), nullptr, WNOHANG) > 0);
+
+    // Use kill with signal 0 to check if any process in the group is still alive.
+    // Unlike waitpid, kill() can detect non-child processes (e.g. grandchildren
+    // reparented to init after the original child forks and exits). This is
+    // important in cloud/headless environments where apps may daemonize.
+    return kill(-((pid_t) native_handle), 0) == 0;
   }
 
   struct sockaddr_in to_sockaddr(boost::asio::ip::address_v4 address, uint16_t port) {

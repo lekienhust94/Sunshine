@@ -192,6 +192,9 @@ namespace config {
     std::string file_state;
 
     std::string external_ip;
+
+    std::string gateway_url;
+    std::string gateway_api_key;
   };
 
   struct input_t {

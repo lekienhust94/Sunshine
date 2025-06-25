@@ -1,0 +1,71 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Sunshine Default Debug",
+      "description": "Standard configuration for Linux build (Debug)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug", 
+        "CMAKE_CUDA_COMPILER": "/home/leo/Documents/build/cuda/bin/nvcc",
+        "CMAKE_CUDA_HOST_COMPILER": "gcc-13",
+        "BUILD_DOCS": "OFF",
+        "CMAKE_CXX_FLAGS": "-O3 -Wall -Wno-error",
+        "CMAKE_C_FLAGS": "-O3 -Wall -Wno-error",
+        "SUNSHINE_ENABLE_WAYLAND": "ON",
+        "SUNSHINE_ENABLE_X11": "ON",
+        "SUNSHINE_ENABLE_DRM": "ON",
+        "SUNSHINE_ASSETS_DIR": "share/sunshine",
+        "SUNSHINE_EXECUTABLE_PATH": "/usr/bin/sunshine",
+        "BUILD_WERROR": "OFF",
+        "CMAKE_C_COMPILER": "/usr/bin/gcc-13",
+        "CMAKE_CXX_COMPILER": "/usr/bin/g++-13"
+      },
+      "environment": {
+          "CC": "gcc-13",
+          "CXX": "g++-13"
+      },
+      "warnings": {
+        "dev": false
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Sunshine Optimized Release",
+      "description": "Standard configuration for Linux build (Release)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release", 
+        "CMAKE_CUDA_COMPILER": "/home/leo/Documents/build/cuda/bin/nvcc",
+        "CMAKE_CUDA_HOST_COMPILER": "gcc-13",
+        "BUILD_DOCS": "OFF",
+        "CMAKE_CXX_FLAGS": "-O3 -Wall -Wno-error",
+        "CMAKE_C_FLAGS": "-O3 -Wall -Wno-error",
+        "SUNSHINE_ENABLE_WAYLAND": "ON",
+        "SUNSHINE_ENABLE_X11": "ON",
+        "SUNSHINE_ENABLE_DRM": "ON",
+        "SUNSHINE_ASSETS_DIR": "share/sunshine",
+        "SUNSHINE_EXECUTABLE_PATH": "/usr/bin/sunshine",
+        "BUILD_WERROR": "ON", 
+        "CMAKE_C_COMPILER": "/usr/bin/gcc-13",
+        "CMAKE_CXX_COMPILER": "/usr/bin/g++-13"
+      },
+      "environment": {
+          "CC": "gcc-13",
+          "CXX": "g++-13"
+      },
+      "warnings": {
+        "dev": false
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release"
+    }
+  ]
+}
