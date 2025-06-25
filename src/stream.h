@@ -15,10 +15,18 @@
 #include "crypto.h"
 #include "video.h"
 
+namespace rtsp_stream {
+  struct launch_session_t;
+}
+
 namespace stream {
   constexpr auto VIDEO_STREAM_PORT = 9;
   constexpr auto CONTROL_PORT = 10;
   constexpr auto AUDIO_STREAM_PORT = 11;
+
+  // Enqueue a pre-defined Moonlight feedback event (RGB LED) for active sessions.
+  // The control thread will serialize and send it via send_feedback_msg().
+  int send_golfzon_event_keyboard(std::uint16_t controller_id, std::uint8_t r, std::uint8_t g, std::uint8_t b);
 
   struct session_t;
 

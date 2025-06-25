@@ -42,6 +42,29 @@ else {
 
 let header = fs.readFileSync(resolve(assetsSrcPath, "template_header.html"))
 
+// Define the array of plugins
+const plugins = [
+    vue(),
+    ViteEjsPlugin({ header }),
+];
+
+// CRITICAL FIX: Only include the Codecov plugin if the necessary token is present.
+// This prevents the 400 Bad Request error during local builds where the token is missing.
+if (process.env.CODECOV_TOKEN && process.env.CODECOV_TOKEN.length > 0) {
+    plugins.push(
+        codecovVitePlugin({
+            enableBundleAnalysis: true,
+            bundleName: "sunshine",
+            uploadToken: process.env.CODECOV_TOKEN,
+            gitService: "github",
+        })
+    );
+    console.log("Codecov plugin enabled for CI upload.");
+} else {
+    console.log("Codecov token missing. Skipping upload plugin.");
+}
+
+
 // https://vitejs.dev/config/
 export default defineConfig({
     resolve: {
@@ -50,17 +73,7 @@ export default defineConfig({
         }
     },
     base: './',
-    plugins: [
-        vue(),
-        ViteEjsPlugin({ header }),
-        // The Codecov vite plugin should be after all other plugins
-        codecovVitePlugin({
-            enableBundleAnalysis: true,
-            bundleName: "sunshine",
-            uploadToken: process.env.CODECOV_TOKEN,
-            gitService: "github",
-        }),
-    ],
+    plugins: plugins, // Use the dynamically created plugin array
     root: resolve(assetsSrcPath),
     build: {
         outDir: resolve(assetsDstPath),

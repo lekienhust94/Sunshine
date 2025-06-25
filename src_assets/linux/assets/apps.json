@@ -8,16 +8,6 @@
       "image-path": "desktop.png"
     },
     {
-      "name": "Low Res Desktop",
-      "image-path": "desktop.png",
-      "prep-cmd": [
-        {
-          "do": "xrandr --output HDMI-1 --mode 1920x1080",
-          "undo": "xrandr --output HDMI-1 --mode 1920x1200"
-        }
-      ]
-    },
-    {
       "name": "Steam Big Picture",
       "detached": [
         "setsid steam steam://open/bigpicture"
@@ -29,6 +19,18 @@
         }
       ],
       "image-path": "steam.png"
+    },
+    {
+            "auto-detach": false,
+            "cmd": "/home/leo/Documents/Package/Linux/MouseEvent.sh",
+            "elevated": false,
+            "exclude-global-prep-cmd": false,
+            "exit-timeout": 5,
+            "image-path": "/home/leo/Pictures/Screenshots/Screenshot from 2025-11-04 14-47-33.png",
+            "name": "MouseEvent",
+            "output": "",
+            "wait-all": true,
+            "id": "2047825290"
     }
   ]
 }

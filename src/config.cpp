@@ -535,6 +535,8 @@ namespace config {
     platf::get_host_name(),  // sunshine_name,
     "sunshine_state.json"s,  // file_state
     {},  // external_ip
+    {},  // gateway_url
+    {},  // gateway_api_key
   };
 
   input_t input {
@@ -1167,6 +1169,8 @@ namespace config {
     path_f(vars, "credentials_file", config::sunshine.credentials_file);
 
     string_f(vars, "external_ip", nvhttp.external_ip);
+    string_f(vars, "gateway_url", nvhttp.gateway_url);
+    string_f(vars, "gateway_api_key", nvhttp.gateway_api_key);
     list_prep_cmd_f(vars, "global_prep_cmd", config::sunshine.prep_cmds);
 
     string_f(vars, "audio_sink", audio.sink);

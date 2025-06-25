@@ -20,6 +20,31 @@ include("${CMAKE_MODULE_PATH}/dependencies/nlohmann_json.cmake")
 find_package(OpenSSL REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
+
+# set the output directory for built objects.
+# This makes sure that the dynamic library goes into the build directory automatically.
+# set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
+# set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
+
+if(WIN32)
+    add_subdirectory(vendored/SDL EXCLUDE_FROM_ALL)
+    add_subdirectory(vendored/SDL_image EXCLUDE_FROM_ALL)
+endif()
+# option(MYGAME_VENDORED "Use vendored libraries" OFF)
+
+# if(MYGAME_VENDORED)
+#     # This assumes the SDL source is available in vendored/SDL
+#     add_subdirectory(vendored/SDL EXCLUDE_FROM_ALL)
+
+#     # This assumes the SDL_image source is available in vendored/SDL_image
+#     add_subdirectory(vendored/SDL_image EXCLUDE_FROM_ALL)
+# else()
+#     # 1. Look for a SDL3 package,
+#     # 2. look for the SDL3-shared component, and
+#     # 3. fail if the shared component cannot be found.
+#     find_package(SDL3 REQUIRED CONFIG REQUIRED COMPONENTS SDL3-shared)
+# endif()
+
 pkg_check_modules(CURL REQUIRED libcurl)
 
 # miniupnp

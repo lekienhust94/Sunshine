@@ -1,0 +1,34 @@
+{
+  "env": {},
+  "apps": [
+    {
+      "name": "Desktop",
+      "image-path": "desktop.png"
+    },
+    {
+      "name": "Steam Big Picture",
+      "cmd": "steam://open/bigpicture",
+      "prep-cmd": [
+        {
+          "do": "",
+          "undo": "steam://close/bigpicture"
+        }
+      ],
+      "auto-detach": true,
+      "wait-all": true,
+      "image-path": "steam.png"
+    },
+    {
+            "auto-detach": false,
+            "cmd": "/home/leo/Documents/Package/Linux/MouseEvent.sh",
+            "elevated": false,
+            "exclude-global-prep-cmd": false,
+            "exit-timeout": 5,
+            "image-path": "/home/leo/Pictures/Screenshots/Screenshot from 2025-11-04 14-47-33.png",
+            "name": "MouseEvent",
+            "output": "",
+            "wait-all": true,
+            "id": "2047825290"
+    }
+  ]
+}

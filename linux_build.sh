@@ -240,7 +240,7 @@ function add_debian_based_deps() {
     "libxrandr-dev"  # X11
     "libxtst-dev"  # X11
     "ninja-build"
-    "npm"  # web-ui
+    #"npm"  # web-ui
     "systemd"
     "udev"
     "wget"  # necessary for cuda install with `run` file
@@ -274,7 +274,8 @@ function add_ubuntu_deps() {
   add_test_ppa
   add_debian_based_deps
   dependencies+=(
-    "libappindicator3-dev"
+  	"libayatana-appindicator3-dev"
+    #"libappindicator3-dev"
   )
 }
 

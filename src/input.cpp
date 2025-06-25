@@ -33,6 +33,8 @@ extern "C" {
   #define WHEEL_DELTA 120
 #endif
 
+#include <iostream>
+
 using namespace std::literals;
 
 namespace input {
@@ -221,6 +223,11 @@ namespace input {
   }
 
   void print(PNV_REL_MOUSE_MOVE_PACKET packet) {
+    std::cout << "NHAN DUOC MOUSE PACKET: x=[" << packet->deltaX
+              << "] y=[" << packet->deltaY << "]" << std::endl;
+    BOOST_LOG(info) 
+    << "NHAN DUOC MOUSE PACKET: x=[" << packet->deltaX
+              << "] y=[" << packet->deltaY << "]" << std::endl;
     BOOST_LOG(debug)
       << "--begin relative mouse move packet--"sv << std::endl
       << "deltaX ["sv << util::endian::big(packet->deltaX) << ']' << std::endl
@@ -229,6 +236,11 @@ namespace input {
   }
 
   void print(PNV_ABS_MOUSE_MOVE_PACKET packet) {
+    std::cout << "NHAN DUOC MOUSE PACKET ABS: x=[" << packet->x
+              << "] y=[" << packet->y << "]" << std::endl;
+    BOOST_LOG(info) 
+      << "NHAN DUOC MOUSE PACKET ABS: x=[" << packet->x
+              << "] y=[" << packet->y << "]" << std::endl;
     BOOST_LOG(debug)
       << "--begin absolute mouse move packet--"sv << std::endl
       << "x      ["sv << util::endian::big(packet->x) << ']' << std::endl
@@ -239,6 +251,11 @@ namespace input {
   }
 
   void print(PNV_MOUSE_BUTTON_PACKET packet) {
+    std::cout << "NHAN DUOC MOUSE click: x=[" << packet->header.magic
+              << "] y=[" << packet->button << "]" << std::endl;
+    BOOST_LOG(info)
+      << "NHAN DUOC MOUSE click: x=[" << packet->header.magic
+              << "] y=[" << packet->button << "]" << std::endl;
     BOOST_LOG(debug)
       << "--begin mouse button packet--"sv << std::endl
       << "action ["sv << util::hex(packet->header.magic).to_string_view() << ']' << std::endl
@@ -299,6 +316,9 @@ namespace input {
    * @param packet The touch packet.
    */
   void print(PSS_TOUCH_PACKET packet) {
+    // method 1: Use standard error (Guaranteed to show)
+    std::cout << "SUNSHINE_TOUCH: x=[" << from_netfloat(packet->x) 
+              << "] y=[" << from_netfloat(packet->y) << "]" << std::endl;
     BOOST_LOG(debug)
       << "--begin touch packet--"sv << std::endl
       << "eventType ["sv << util::hex(packet->eventType).to_string_view() << ']' << std::endl

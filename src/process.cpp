@@ -301,6 +301,9 @@ namespace proc {
     // Perform cleanup actions now if needed
     if (_process) {
       BOOST_LOG(info) << "App exited with code ["sv << _process.native_exit_code() << ']';
+      BOOST_LOG(info) << "Process group handle: "sv << (std::uintptr_t) _process_group.native_handle()
+                      << ", wait_all: "sv << _app.wait_all
+                      << ", auto_detach: "sv << _app.auto_detach;
       terminate();
     }
 

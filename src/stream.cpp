@@ -474,6 +474,26 @@ namespace stream {
 
   static auto broadcast = safe::make_shared<broadcast_ctx_t>(start_broadcast, end_broadcast);
 
+  int send_golfzon_event_keyboard(std::uint16_t controller_id, std::uint8_t r, std::uint8_t g, std::uint8_t b) {
+    auto ref = broadcast.ref();
+    if (!ref) {
+      return -1;
+    }
+
+    int queued = 0;
+    auto lg = ref->control_server._sessions.lock();
+    for (auto *session: *ref->control_server._sessions) {
+      if (!session || session::state(*session) != session::state_e::RUNNING) {
+        continue;
+      }
+
+      session->control.feedback_queue->raise(platf::gamepad_feedback_msg_t::make_rgb_led(controller_id, r, g, b));
+      ++queued;
+    }
+
+    return queued > 0 ? 0 : -1;
+  }
+
   session_t *control_server_t::get_session(const net::peer_t peer, uint32_t connect_data) {
     {
       // Fast path - look up existing session by peer
