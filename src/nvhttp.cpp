@@ -3,6 +3,8 @@
  * @brief Definitions for the nvhttp (GameStream) server.
  */
 // macros
+#include "nlohmann/json_fwd.hpp"
+#include <iostream>
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
 
 // standard includes
@@ -35,12 +37,38 @@
 #include "uuid.h"
 #include "video.h"
 
+// import curl to call request
+#include <curl/curl.h>
+#include <nlohmann/json.hpp>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
+using json = nlohmann::json;
+
 using namespace std::literals;
+
+
+#include <iostream>     // For std::cout, std::cerr
+#include <string>       // For std::string
+#include <cstring>      // For memset(), strncpy()
+#include <thread>       // For std::thread, std::thread::detach()
+
+const char* SOCKET_PATH = "/tmp/sunshine_ipc.sock";
+const int BUFFER_SIZE = 1024;
+const int MAX_CONNECTIONS = 5; 
+
 
 namespace nvhttp {
 
   namespace fs = std::filesystem;
   namespace pt = boost::property_tree;
+
+  bool unrealAppear = false;
+
+  std::string clientName;
 
   crypto::cert_chain_t cert_chain;
 
@@ -545,7 +573,17 @@ namespace nvhttp {
   template<class T>
   void pair(std::shared_ptr<safe::queue_t<crypto::x509_t>> &add_cert, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
     print_req<T>(request);
-
+    std::cout << "========================================= \n";
+    std::cout << "========================================= \n";
+    std::cout << "My Reqest \n";
+    std::cout << "Method: " << request->method << "\n";
+    std::cout << "Path: " << request->path << "\n";
+     std::cout << "Qery:\n";
+    for (auto &[name, val] : request->parse_query_string()) {
+      std::cout << name << " -- " << val << "\n";
+    }
+    std::cout << "========================================= \n";
+    std::cout << "========================================= \n";
     pt::ptree tree;
 
     auto fg = util::fail_guard([&]() {
@@ -588,10 +626,23 @@ namespace nvhttp {
         } else {
 #if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
           system_tray::update_tray_require_pin();
+
+          auto args = request->parse_query_string();
+          auto it = args.find("devicename");  // Directly search for "deviceName"
+          if (it != args.end()) {
+            std::string deviceName = it->second;
+            std::cout << "Device Name: " << deviceName << std::endl;
+            clientName = deviceName;
+          } else {
+            std::cerr << "deviceName parameter not found in query string." << std::endl;
+            // Handle the case where the parameter is missing
+          }
+          
 #endif
           ptr->second.async_insert_pin.response = std::move(response);
-
           fg.disable();
+          getSecrectPin();
+          
           return;
         }
       } else if (it->second == "pairchallenge"sv) {
@@ -623,6 +674,91 @@ namespace nvhttp {
       tree.put("root.<xmlattr>.status_message", "Invalid pairing request");
     }
   }
+
+  template<class T>
+  void parseData(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
+    print_req<T>(request);
+
+    std::cout << "========================================= \n";
+    std::cout << "========================================= \n";
+    std::cout << "My Reqest \n";
+    std::cout << "Method: " << request->method << "\n";
+    std::cout << "Path: " << request->path << "\n";
+    std::cout << "Qery:\n";
+   
+
+    pt::ptree tree;
+    int statusCode = 200; // Assume success initially
+
+    auto fg = util::fail_guard([&]() {
+      std::ostringstream data;
+
+      pt::write_xml(data, tree);
+      response->write(data.str());
+      response->close_connection_after_response = true;
+    });
+
+    try {
+      std::string requestBody = request->content.string();
+      // Log the raw request body
+      std::cerr << "Raw Request Body:\n"
+                << requestBody << "\n";
+
+      json jsonData = json::parse(requestBody);
+      // Log the parsed JSON data
+      std::cerr << "Parsed JSON Data:\n"
+                << jsonData.dump(4) << "\n";
+
+      int userID = jsonData["userID"];
+      int distance = jsonData["distance"];
+      std::string club = jsonData["club"];
+      json responseData = {
+        {"status", 200},
+        {"message", "Success"},
+        {"data", {
+                   {"userID", userID},
+                   {"distance", distance},
+                   {"club", club}  // Include the data in the response
+                 }}
+      };
+
+      json saveData = {
+
+        {"userID", userID},
+        {"distance", distance},
+        {"club", club}  // Include the data in the response
+
+      };
+
+      std::ofstream outputFile("D:\\Game\\Windows\\MouseEvent\\Saved\\Datatranfer.json");
+      if (outputFile.is_open()) {
+        outputFile << saveData.dump(4);  // Use dump() to get formatted JSON string
+        outputFile.close();
+        std::cerr << "JSON data written to file.txt\n";
+      } else {
+        std::cerr << "Error opening file.txt for writing.\n";
+      }
+
+      tree.put("root.<xmlattr>.result", responseData);
+
+      // The loop below is incorrect; requestBody is a string, not a map
+      // for (auto &[name, val] : requestBody) {  // This is wrong!
+      //     std::cout << name << " -- " << val << "\n";
+      // }
+
+      std::cout << "========================================= \n";
+      std::cout << "========================================= \n";
+
+    } catch (json::parse_error &e) {
+      statusCode = 400;  // Bad Request
+      tree.put("root.<xmlattr>.status_message", "Invalid JSON data: " + std::string(e.what()));
+    } catch (std::exception &e) {
+      statusCode = 500;  // Internal Server Error
+      tree.put("root.<xmlattr>.status_message", "Server error: " + std::string(e.what()));
+    }
+    tree.put("root.<xmlattr>.status_message", "Success");
+    tree.put("root.<xmlattr>.status_code", statusCode);
+}
 
   bool pin(std::string pin, std::string name) {
     pt::ptree tree;
@@ -663,6 +799,7 @@ namespace nvhttp {
     } else if (async_response.has_right() && async_response.right()) {
       async_response.right()->write(data.str());
     } else {
+      std::cout << "Error PIN";
       return false;
     }
 
@@ -687,6 +824,30 @@ namespace nvhttp {
     }
 
     auto local_endpoint = request->local_endpoint();
+
+    std::cout << "========================================= \n";
+    std::cout << "========================================= \n";
+    std::cout << "My Request \n";
+    std::cout << "Method: " << request->method << "\n";
+    std::cout << "Path: " << request->path << "\n";
+    std::cout << "Query:\n";
+
+    auto args = request->parse_query_string();  // Parse only ONCE
+
+    for (auto const &[name, val] : args) {  // Use const& for efficiency
+      std::cout << name << " -- " << val << "\n";
+    }
+
+    auto clientID = args.find("uniqueid"s);
+
+    if (clientID != std::end(args)) {
+      std::cout << "clientID: " << clientID->second << "\n";  // Access the VALUE
+    } else {
+      std::cout << "clientID: Not found\n";
+    }
+
+    std::cout << "========================================= \n";
+    std::cout << "========================================= \n";
 
     pt::ptree tree;
 
@@ -806,8 +967,102 @@ namespace nvhttp {
     }
   }
 
+    void server_thread_function() {
+      int listen_fd, client_fd;
+      struct sockaddr_un server_addr;
+
+      std::cout << "[IPC Thread] Starting Sunshine IPC Server..." << std::endl;
+      
+      // 1. Create the listening socket
+      listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+      if (listen_fd == -1) {
+          std::cerr << "[IPC Thread] Error: Failed to create socket." << std::endl;
+          return; 
+      }
+
+      // 2. Clean up old socket file (CRUCIAL UDS STEP)
+      unlink(SOCKET_PATH);
+
+      // 3. Set up the server address structure
+      std::memset(&server_addr, 0, sizeof(server_addr));
+      server_addr.sun_family = AF_UNIX;
+      std::strncpy(server_addr.sun_path, SOCKET_PATH, sizeof(server_addr.sun_path) - 1);
+
+      // 4. Bind the socket to the filesystem path
+      if (bind(listen_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
+          std::cerr << "[IPC Thread] Error: Failed to bind socket." << std::endl;
+          close(listen_fd);
+          unlink(SOCKET_PATH);
+          return; 
+      }
+
+      // 5. Start listening for connections
+      if (listen(listen_fd, MAX_CONNECTIONS) == -1) {
+          std::cerr << "[IPC Thread] Error: Failed to listen on socket." << std::endl;
+          close(listen_fd);
+          unlink(SOCKET_PATH);
+          return; 
+      }
+
+      std::cout << "[IPC Thread] Server is listening for client connections..." << std::endl;
+
+      // --- Main Server Loop (Accept and Handle Clients) ---
+      while (true) {
+          // 6. Wait for a client to connect (BLOCKS THIS THREAD ONLY)
+          client_fd = accept(listen_fd, NULL, NULL);
+          if (client_fd == -1) {
+              std::cerr << "[IPC Thread] Error: Failed to accept connection." << std::endl;
+              continue; 
+          }
+
+          std::cout << "\n[IPC Thread] Unreal Engine Client connected." << std::endl;
+
+          // --- Communication Loop (Talking to the specific client) ---
+          char buffer[BUFFER_SIZE];
+          ssize_t bytes_read;
+
+          while ((bytes_read = recv(client_fd, buffer, BUFFER_SIZE - 1, 0)) > 0) {
+              buffer[bytes_read] = '\0'; 
+              std::cout << "[IPC Thread] Received from client: " << buffer << std::endl;
+              if (std::strcmp(buffer, "Started") == 0) {
+                unrealAppear = true;
+              }
+              // Send a response back
+              std::string response = "ACK: Message received.";
+              if (send(client_fd, response.c_str(), response.length(), 0) == -1) {
+                  std::cerr << "[IPC Thread] Error: Failed to send response." << std::endl;
+                  break;
+              }
+          }
+
+          if (bytes_read == 0) {
+              std::cout << "[IPC Thread] Client disconnected gracefully." << std::endl;
+          } else if (bytes_read == -1) {
+              std::cerr << "[IPC Thread] Error: Communication error." << std::endl;
+          }
+
+          close(client_fd);
+      }
+
+      close(listen_fd);
+      unlink(SOCKET_PATH);
+  }
+
+
+  void start_ipc_server() {
+      std::thread server_thread(server_thread_function);
+
+      server_thread.detach();
+  }
+
   void launch(bool &host_audio, resp_https_t response, req_https_t request) {
+
+    start_ipc_server();
+
     print_req<SunshineHTTPS>(request);
+
+    // std::thread displayThread(displayFullscreenImage, "C:\\Users\\GOLFZON\\Pictures\\Download\\loading.jpg");  // Start the display thread
+    // displayThread.detach();
 
     pt::ptree tree;
     bool revert_display_configuration {false};
@@ -822,6 +1077,21 @@ namespace nvhttp {
         display_device::revert_configuration();
       }
     });
+
+    
+    /** This code work could open application
+    // Replace "path/to/your/application.exe" with the actual path
+    // std::string appPath = "\"D:\\Game\\Windows\\MouseEvent.exe\""; 
+
+    // // Launch the application
+    // ShellExecute(NULL, "open", appPath.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    // tree.put("root.resume", 0);
+    // tree.put("root.<xmlattr>.status_code", 400);
+    // tree.put("root.<xmlattr>.status_message", "Missing a required launch parameter");
+
+    // return;
+    */
+    
 
     auto args = request->parse_query_string();
     if (
@@ -883,7 +1153,6 @@ namespace nvhttp {
 
       return;
     }
-
     if (appid > 0) {
       auto err = proc::proc.execute(appid, launch_session);
       if (err) {
@@ -895,10 +1164,16 @@ namespace nvhttp {
       }
     }
 
+    BOOST_LOG(info) << "Pausing 5 seconds to allow application window to stabilize."sv;
+    while (unrealAppear == false) {
+      sleep(0.1);
+    }
+
     tree.put("root.<xmlattr>.status_code", 200);
     tree.put("root.sessionUrl0", launch_session->rtsp_url_scheme + net::addr_to_url_escaped_string(request->local_endpoint().address()) + ':' + std::to_string(net::map_port(rtsp_stream::RTSP_SETUP_PORT)));
     tree.put("root.gamesession", 1);
 
+    unrealAppear = false;
     rtsp_stream::launch_session_raise(launch_session);
 
     // Stream was started successfully, we will revert the config when the app or session terminates
@@ -1134,9 +1409,13 @@ namespace nvhttp {
     https_server.config.port = port_https;
 
     http_server.default_resource["GET"] = not_found<SimpleWeb::HTTP>;
+    http_server.default_resource["POST"] = not_found<SimpleWeb::HTTP>;
     http_server.resource["^/serverinfo$"]["GET"] = serverinfo<SimpleWeb::HTTP>;
     http_server.resource["^/pair$"]["GET"] = [&add_cert](auto resp, auto req) {
       pair<SimpleWeb::HTTP>(add_cert, resp, req);
+    };
+    http_server.resource["^/swingInfo$"]["POST"] = [](auto resp, auto req) {
+      parseData<SimpleWeb::HTTP>(resp, req);
     };
 
     http_server.config.reuse_address = true;
@@ -1193,4 +1472,44 @@ namespace nvhttp {
     load_state();
     return removed;
   }
-}  // namespace nvhttp
+
+  size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp) {
+    std::stringstream *stream = static_cast<std::stringstream *>(userp);
+    if (stream) {
+      stream->write(static_cast<char *>(contents), size * nmemb);
+      return size * nmemb;
+    }
+    return 0;  // Indicate failure
+  }
+
+  void getSecrectPin() {
+    std::cout << "Calling request to postman...\n";
+    CURL *curl = curl_easy_init();
+    CURLcode response;
+    std::stringstream readBuffer;  // Create a stringstream locally
+
+    if (curl) {
+      curl_easy_setopt(curl, CURLOPT_URL, "https://e1377b8b-a262-46ad-880a-1973c14f23c0.mock.pstmn.io/pin");
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);  // Pass address of local stringstream
+
+      response = curl_easy_perform(curl);
+      if (response != CURLE_OK) {
+        std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(response) << std::endl;
+      } else {
+        try {
+          json jsonData = json::parse(readBuffer.str());
+          std::string pinCode = jsonData["data"]["pin"];
+          std::cout << "Secret Pin: " << pinCode << std::endl;
+          bool pinStatus = pin(pinCode, clientName);
+          std::cout << "pinStatus: " << pinStatus << std::endl;
+        } catch (json::parse_error &e) {
+          std::cerr << "JSON parse error: " << e.what() << std::endl;
+        } catch (const std::exception &e) {
+          std::cerr << "Error in JSON processing: " << e.what() << std::endl;
+        }
+      }
+      curl_easy_cleanup(curl);
+    }
+  }
+} // namespace nvhttp

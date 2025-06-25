@@ -198,7 +198,8 @@ function add_ubuntu_deps() {
 
   add_debian_based_deps
   dependencies+=(
-    "libappindicator3-dev"
+  	"libayatana-appindicator3-dev"
+    #"libappindicator3-dev"
   )
 }
 

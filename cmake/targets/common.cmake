@@ -25,7 +25,12 @@ if(NOT DEFINED CMAKE_CUDA_STANDARD)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 endif()
 
-target_link_libraries(sunshine ${SUNSHINE_EXTERNAL_LIBRARIES} ${EXTRA_LIBS})
+if(WIN32)
+    target_link_libraries(sunshine PRIVATE SDL3_image::SDL3_image SDL3::SDL3 ${SUNSHINE_EXTERNAL_LIBRARIES} ${EXTRA_LIBS})
+elseif(UNIX)
+    target_link_libraries(sunshine ${SUNSHINE_EXTERNAL_LIBRARIES} ${EXTRA_LIBS})
+endif()
+
 target_compile_definitions(sunshine PUBLIC ${SUNSHINE_DEFINITIONS})
 set_target_properties(sunshine PROPERTIES CXX_STANDARD 20
         VERSION ${PROJECT_VERSION}
