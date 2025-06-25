@@ -22,11 +22,31 @@
 #include "upnp.h"
 #include "video.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#include <chrono>
+#include <thread>
+#include <filesystem>
+#include <mutex>
+#include <condition_variable>
+#include <future> // for std::promise and std::future
+
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_main.h>
+#include <SDL3_image/SDL_image.h>
+
+
+namespace fs = std::filesystem;
+#endif
+
 extern "C" {
 #include "rswrapper.h"
 }
 
+#include "unreal_launcher.h"
+
 using namespace std::literals;
+
 
 std::map<int, std::function<void()>> signal_handlers;
 
@@ -88,6 +108,7 @@ WINAPI BOOL ConsoleCtrlHandler(DWORD type) {
 }
 #endif
 
+<<<<<<< HEAD
 #if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
 constexpr bool tray_is_enabled = true;
 #else
@@ -126,8 +147,53 @@ void mainThreadLoop(const std::shared_ptr<safe::event_t<bool>> &shutdown_event) 
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 }
+=======
+#ifdef _WIN32
+// Windows-specific implementation (uses Windows APIs/paths)
+void fileMonitor(const std::string &signalFilePath) {
+  while (true) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    if (fs::exists(signalFilePath)) {
+      try {
+        fs::remove(signalFilePath);
+        std::cout << "File '" << signalFilePath << "' removed successfully.\n";
+        nvhttp::erase_all_clients();
+        
+        rtsp_stream::terminate_sessions();
+        if (proc::proc.running() > 0) {
+          proc::proc.terminate();
+        }
+        
+        display_device::revert_configuration();
+
+      } catch (const fs::filesystem_error &e) {
+        std::cerr << "Error removing file: " << e.what() << '\n';
+      }
+    }
+  }
+}
+#endif
+>>>>>>> a2b85e14 (custom sunshine Linux server)
 
 int main(int argc, char *argv[]) {
+  const std::string FEH_CMD = "/usr/bin/feh -F -Y -N -Z -B white /home/leo/Desktop/Loading_icon.gif &";
+    
+    // 2. Launch FEH (White Screen)
+  std::system(FEH_CMD.c_str());
+
+
+  std::cout << "[Main Thread] IPC server is running in the background." << std::endl;
+  std::cout << "[Main Thread] Main Sunshine logic can now run without being blocked." << std::endl;
+
+
+  std::string signalFilePath;
+    
+  #ifdef _WIN32
+    signalFilePath = "D:\\Game\\Windows\\MouseEvent\\Saved\\EngineShutdown.txt";
+    std::thread monitorThread(fileMonitor, signalFilePath);
+    monitorThread.detach();
+  #endif
+
   lifetime::argv = argv;
 
   task_pool_util::TaskPool::task_id_t force_shutdown = nullptr;
@@ -229,16 +295,17 @@ int main(int argc, char *argv[]) {
       BOOST_LOG(error) << "Failed to register session monitor window class"sv << std::endl;
       return;
     }
-
+    RECT desktopRect;
+    GetWindowRect(GetDesktopWindow(), &desktopRect);
     auto wnd = CreateWindowExA(
       0,
       wnd_class.lpszClassName,
       "Sunshine Session Monitor Window",
       0,
-      CW_USEDEFAULT,
-      CW_USEDEFAULT,
-      CW_USEDEFAULT,
-      CW_USEDEFAULT,
+      desktopRect.left,
+      desktopRect.top,
+      desktopRect.right - desktopRect.left,
+      desktopRect.bottom - desktopRect.top,
       nullptr,
       nullptr,
       nullptr,
@@ -422,6 +489,5 @@ int main(int argc, char *argv[]) {
     system_tray::end_tray_threaded();
   }
 #endif
-
   return lifetime::desired_exit_code;
 }
